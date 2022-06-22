@@ -1,6 +1,6 @@
 # ascii3d_deadman
 
-This is an attempt to make a small 3D graphics engine in python.
+This is an attempt to make a small ascii 3D graphics engine in python.
 
 It was inspired by an ascii rendering of myself handing that I wrote in a dissociated state of mind at https://lists.cpunks.org/pipermail/cypherpunks/2022-June/101485.html .
 
