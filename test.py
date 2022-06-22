@@ -14,9 +14,9 @@ class CoordFrame:
     def apply(self, vec):
         return self.mat @ vec
     def inverted(self):
-        return CoordFrame(self.mat.inverse())
+        return CoordFrame(np.linalg.inv(self.mat))
     @classmethod
-    def fromaxisangle(cls, axis, angle):
+    def fromaxisangle(cls, axis, angle, position=[0,0,0,0]):
         # from https://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
         cos_theta = np.cos(angle)
         sin_theta = np.sin(angle)
@@ -29,24 +29,42 @@ class CoordFrame:
             sin_theta * np.cross(axis, -I) +
             (1 - cos_theta) * np.outer(axis, axis)
         )
+        mat[:3,3] = position[:3]
         return cls(mat)
 
 class Point:
     def __init__(self, str, pos):
-        self.points = np.array([pos])
+        self._points = np.array([pos])
         self.str = str
-    def _points(self):
-        return self.points
+    def points(self):
+        return self._points
     def draw(self, engine, projected_points):
         x, y, _ = projected_points[0]
         engine.plot(x, y, self.str)
 
 
 class Engine:
+    def __init__(self, *initial_objects):
+        self.objects = []
+        self.object_points = []
+        self.add(*initial_objects)
     def run(self):
         curses.wrapper(self.__run)
-    def stop(self):
-        self.running = False
+    def plot(self, x, y, str):
+        line = round(y / self.char_height)
+        row = round(x / self.char_width)
+        self.window.addstr(line, row, str)
+    def add(self, *objects):
+        self.objects.extend(objects)
+        self.__update_pointslist()
+    def __run(self, window):
+        self.__init(window)
+        self.running = True
+        camera = None
+        while self.running:
+            camera = self.update(*self.__update(camera))
+            if camera is None:
+                break
     def __init(self, window):
         # curses
         self.window = window
@@ -55,16 +73,28 @@ class Engine:
         # time
         self.monotonic_start = time.monotonic()
         self.time = 0
-    def __run(self, window):
-        self.__init(window)
-        self.running = True
-        while self.running:
-            self.update(*self.__update())
-    def plot(self, x, y, str):
-        line = round(y / self.char_height)
-        row = round(x / self.char_width)
-        self.window.addstr(line, row, str)
-    def __update(self):
+    def __update_pointslist(self):
+        self.object_points = [object.points() for object in self.objects]
+        if len(self.object_points):
+            # allocate space
+            self.untransformed_points = np.concatenate(self.object_points, axis=0)
+            self.transformed_points = self.untransformed_points.copy()[:,:3]
+            # find offsets for objects
+            offset = 0
+            self.object_point_ranges = []
+            for idx, points in enumerate(self.object_points):
+                next_offset + offset + len(points)
+                self.object_point_ranges.append((offset, next_offset))
+                offset = next_offset
+    def __update(self, camera_frame):
+        # draw the geometry
+        if camera_frame is not None:
+            inverse_camera_frame = camera_frame.inverted()
+            if len(self.object_points):
+                untransformed_points = np.concatenate(self.object_points)
+                transformed_points = inverse_camera_frame.apply(untransformed_points)
+                for idx, (object, range) in enumerate(zip(self.objects, self.object_point_ranges)):
+                    object.draw(self, transformed_points[range[0]:range[1]])
         # getting a key also refreshes
         try:
             key = self.window.getkey()
@@ -84,15 +114,20 @@ class Engine:
         self.time = now
         return time_change, key
 
-class App(Engine):
+class Scene(Engine):
     def __init__(self):
         self.last_key = 'press key?'
+        #self.camera = CoordFrame.fromaxisangle(Z, 0, [0,10,-10])
+        super().__init__()
+        #    Point(
+        #)
     def update(self, time_change, key = ''):
         if key:
             if key == 'q':
                 return self.stop()
             self.last_key = key
         self.plot(self.width / 2, self.height / 2, self.last_key)
+        return CoordFrame()
 
 if __name__ == '__main__':
-    App().run()
+    Scene().run()
