@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import curses, numpy as np
+import curses, time, numpy as np
 
 X = np.array([1.0,0,0,0])
 Y = np.array([0,1.0,0,0])
@@ -30,10 +30,6 @@ class CoordFrame:
             (1 - cos_theta) * np.outer(axis, axis)
         )
         return cls(mat)
-        
-
-# to move into camera space, call cameraframe.inverted().apply(vector)
-# to move into outer space, call innerframe.apply(vector)
 
 class Point:
     def __init__(self, str, pos):
@@ -49,14 +45,21 @@ class Point:
 class Engine:
     def run(self):
         curses.wrapper(self.__run)
-    def __init(self):
+    def stop(self):
+        self.running = False
+    def __init(self, window):
+        # curses
+        self.window = window
         self.window.nodelay(True)
         self.window.clear()
+        # time
+        self.monotonic_start = time.monotonic()
+        self.time = 0
     def __run(self, window):
-        self.window = window
-        self.__init()
-        while True:
-            self.update(self.__update())
+        self.__init(window)
+        self.running = True
+        while self.running:
+            self.update(*self.__update())
     def plot(self, x, y, str):
         line = round(y / self.char_height)
         row = round(x / self.char_width)
@@ -75,17 +78,21 @@ class Engine:
         self.width = self.cols * self.char_width
         self.height = self.lines * self.char_height
         self.window.erase()
-        return key
+        # update time and calculate change
+        now = time.monotonic() - self.monotonic_start
+        time_change = now - self.time
+        self.time = now
+        return time_change, key
 
 class App(Engine):
     def __init__(self):
         self.last_key = 'press key?'
-    def update(self, key = ''):
+    def update(self, time_change, key = ''):
         if key:
+            if key == 'q':
+                return self.stop()
             self.last_key = key
         self.plot(self.width / 2, self.height / 2, self.last_key)
 
 if __name__ == '__main__':
-    frame = CoordFrame.fromaxisangle(Y, 0.2)
-    print(frame.mat)
-    #App().run()
+    App().run()
