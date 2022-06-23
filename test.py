@@ -12,7 +12,7 @@ class CoordFrame:
             mat = np.identity(4)
         self.mat = mat
     def apply(self, vec):
-        return self.mat @ vec
+        return vec @ self.mat
     def inverted(self):
         return CoordFrame(np.linalg.inv(self.mat))
     @classmethod
@@ -29,7 +29,7 @@ class CoordFrame:
             sin_theta * np.cross(axis, -I) +
             (1 - cos_theta) * np.outer(axis, axis)
         )
-        mat[:3,3] = position[:3]
+        mat[3,:3] = position[:3]
         return cls(mat)
 
 class Point:
@@ -83,7 +83,7 @@ class Engine:
             offset = 0
             self.object_point_ranges = []
             for idx, points in enumerate(self.object_points):
-                next_offset + offset + len(points)
+                next_offset = offset + len(points)
                 self.object_point_ranges.append((offset, next_offset))
                 offset = next_offset
     def __update(self, camera_frame):
@@ -117,17 +117,16 @@ class Engine:
 class Scene(Engine):
     def __init__(self):
         self.last_key = 'press key?'
-        #self.camera = CoordFrame.fromaxisangle(Z, 0, [0,10,-10])
-        super().__init__()
-        #    Point(
-        #)
+        self.camera = CoordFrame.fromaxisangle(Z, 0, [0,10,-10,1])
+        self.text_object = Point("press key?", [0,0,0,1])
+        super().__init__(self.text_object)
     def update(self, time_change, key = ''):
         if key:
             if key == 'q':
                 return self.stop()
-            self.last_key = key
-        self.plot(self.width / 2, self.height / 2, self.last_key)
-        return CoordFrame()
+            self.text_object.str = key
+        #self.plot(self.width / 2, self.height / 2, self.last_key)
+        return self.camera
 
 if __name__ == '__main__':
     Scene().run()
