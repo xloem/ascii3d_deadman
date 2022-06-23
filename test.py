@@ -66,7 +66,8 @@ class Engine:
             if camera is None:
                 break
     def __init(self, window):
-        self.screen_vec = np.ones(2)
+        self.screen_translation = np.zeros(2)
+        self.screen_scale = np.ones(2)
         # curses
         self.window = window
         self.window.nodelay(True)
@@ -104,11 +105,11 @@ class Engine:
         self.width = self.cols * self.char_width
         self.height = self.lines * self.char_height
         self.window.erase()
-        # update screen vec
-        self.screen_vec[:] = (self.width, self.height)
-        self.screen_vec /= 2
-        self.min_dim = self.screen_vec.min()
-        self.screen_vec[1] = -self.screen_vec[1]
+        # update screen vecs
+        self.screen_translation[:] = (self.width, self.height)
+        self.screen_translation /= 2
+        min_dim = self.screen_translation.min()
+        self.screen_scale[:] = (min_dim, -min_dim)
         # draw the geometry
         if camera_frame is not None:
             inverse_camera_frame = camera_frame.inverted()
@@ -117,8 +118,8 @@ class Engine:
                 untransformed_points = np.concatenate(self.object_points)
                 inverse_camera_frame.apply(untransformed_points, out=self.transformed_xyzw)
                 self.transformed_xy /= self.transformed_z
-                self.transformed_xy *= self.min_dim
-                self.transformed_xy += self.screen_vec
+                self.transformed_xy *= self.screen_scale
+                self.transformed_xy += self.screen_translation
                 # draw
                 for idx, (object, range) in enumerate(zip(self.objects, self.object_point_ranges)):
                     object.draw(self, self.transformed_xyz[range[0]:range[1]])
@@ -131,7 +132,7 @@ class Engine:
 class Scene(Engine):
     def __init__(self):
         self.last_key = 'press key?'
-        self.camera = CoordFrame.fromaxisangle(X, np.pi/2, [0,10,-10,1])
+        self.camera = CoordFrame.fromaxisangle(X, -np.pi/4, [0,10,-10,1]) # 10 units above and away, aiming down 45 deg
         self.text_object = Point("press key?", [0,0,0,1])
         super().__init__(self.text_object)
     def update(self, time_change, key = ''):
