@@ -93,6 +93,7 @@ class Engine:
             if len(self.object_points):
                 untransformed_points = np.concatenate(self.object_points)
                 transformed_points = inverse_camera_frame.apply(untransformed_points)[:,:3]
+                transformed_points[:,:2] /= transformed_points[:,2:3]
                 for idx, (object, range) in enumerate(zip(self.objects, self.object_point_ranges)):
                     object.draw(self, transformed_points[range[0]:range[1]])
         # getting a key also refreshes
@@ -117,7 +118,7 @@ class Engine:
 class Scene(Engine):
     def __init__(self):
         self.last_key = 'press key?'
-        self.camera = CoordFrame.fromaxisangle(Z, 0, [0,10,-10,1])
+        self.camera = CoordFrame.fromaxisangle(X, np.pi/2, [0,10,-10,1])
         self.text_object = Point("press key?", [0,0,0,1])
         super().__init__(self.text_object)
     def update(self, time_change, key = ''):
