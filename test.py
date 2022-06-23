@@ -11,12 +11,12 @@ class CoordFrame:
         if mat is None:
             mat = np.identity(4)
         self.mat = mat
-    def apply(self, vec):
-        return vec @ self.mat
+    def apply(self, vec, out=None):
+        return np.matmul(vec, self.mat, out=out)
     def inverted(self):
         return CoordFrame(np.linalg.inv(self.mat))
     @classmethod
-    def fromaxisangle(cls, axis, angle, position=[0,0,0,0]):
+    def fromaxisangle(cls, axis, angle, position=[0,0,0], scale=1):
         # from https://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
         cos_theta = np.cos(angle)
         sin_theta = np.sin(angle)
@@ -28,7 +28,7 @@ class CoordFrame:
             cos_theta * I +
             sin_theta * np.cross(axis, -I) +
             (1 - cos_theta) * np.outer(axis, axis)
-        )
+        ) * scale
         mat[3,:3] = position[:3]
         return cls(mat)
 
@@ -52,8 +52,8 @@ class Engine:
         curses.wrapper(self.__run)
     def plot(self, x, y, str):
         line = round(y / self.char_height)
-        row = round(x / self.char_width)
-        self.window.addstr(line, row, str)
+        col = round(x / self.char_width)
+        self.window.addstr(line, col, str)
     def add(self, *objects):
         self.objects.extend(objects)
         self.__update_pointslist()
@@ -66,6 +66,7 @@ class Engine:
             if camera is None:
                 break
     def __init(self, window):
+        self.screen_vec = np.ones(2)
         # curses
         self.window = window
         self.window.nodelay(True)
@@ -77,8 +78,11 @@ class Engine:
         self.object_points = [object.points() for object in self.objects]
         if len(self.object_points):
             # allocate space
-            self.untransformed_points = np.concatenate(self.object_points, axis=0)
-            self.transformed_points = self.untransformed_points.copy()[:,:3]
+            self.untransformed_points = np.concatenate(self.object_points, axis=0, dtype=float)
+            self.transformed_xyzw = self.untransformed_points.copy()
+            self.transformed_z = self.transformed_xyzw[:,2:3]
+            self.transformed_xy = self.transformed_xyzw[:,:2]
+            self.transformed_xyz = self.transformed_xyzw[:,:3]
             # find offsets for objects
             offset = 0
             self.object_point_ranges = []
@@ -87,15 +91,6 @@ class Engine:
                 self.object_point_ranges.append((offset, next_offset))
                 offset = next_offset
     def __update(self, camera_frame):
-        # draw the geometry
-        if camera_frame is not None:
-            inverse_camera_frame = camera_frame.inverted()
-            if len(self.object_points):
-                untransformed_points = np.concatenate(self.object_points)
-                transformed_points = inverse_camera_frame.apply(untransformed_points)[:,:3]
-                transformed_points[:,:2] /= transformed_points[:,2:3]
-                for idx, (object, range) in enumerate(zip(self.objects, self.object_point_ranges)):
-                    object.draw(self, transformed_points[range[0]:range[1]])
         # getting a key also refreshes
         try:
             key = self.window.getkey()
@@ -109,6 +104,24 @@ class Engine:
         self.width = self.cols * self.char_width
         self.height = self.lines * self.char_height
         self.window.erase()
+        # update screen vec
+        self.screen_vec[:] = (self.width, self.height)
+        self.screen_vec /= 2
+        self.min_dim = self.screen_vec.min()
+        self.screen_vec[1] = -self.screen_vec[1]
+        # draw the geometry
+        if camera_frame is not None:
+            inverse_camera_frame = camera_frame.inverted()
+            if len(self.object_points):
+                # transform from 3d to 2d
+                untransformed_points = np.concatenate(self.object_points)
+                inverse_camera_frame.apply(untransformed_points, out=self.transformed_xyzw)
+                self.transformed_xy /= self.transformed_z
+                self.transformed_xy *= self.min_dim
+                self.transformed_xy += self.screen_vec
+                # draw
+                for idx, (object, range) in enumerate(zip(self.objects, self.object_point_ranges)):
+                    object.draw(self, self.transformed_xyz[range[0]:range[1]])
         # update time and calculate change
         now = time.monotonic() - self.monotonic_start
         time_change = now - self.time
@@ -124,7 +137,7 @@ class Scene(Engine):
     def update(self, time_change, key = ''):
         if key:
             if key == 'q':
-                return self.stop()
+                return None
             self.text_object.str = key
         #self.plot(self.width / 2, self.height / 2, self.last_key)
         return self.camera
