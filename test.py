@@ -133,13 +133,23 @@ class Scene(Engine):
     def __init__(self):
         self.last_key = 'press key?'
         self.camera = CoordFrame.fromaxisangle(X, -np.pi/4, [0,10,-10,1]) # 10 units above and away, aiming down 45 deg
-        self.text_object = Point("press key?", [0,0,0,1])
-        super().__init__(self.text_object)
+        #self.text_object = Point("press key?", [0,0,0,1])
+        self.text_objects = [
+            Point("press key?", [pos[0]*8, 0, pos[1]*8, 1])
+            for pos in (
+                (1, 1),
+                (1, -1),
+                (-1, -1),
+                (-1, 1)
+            )
+        ]
+        super().__init__(*self.text_objects)
     def update(self, time_change, key = ''):
         if key:
             if key == 'q':
                 return None
-            self.text_object.str = key
+            for text_object in self.text_objects:
+                text_object.str = key
         #self.plot(self.width / 2, self.height / 2, self.last_key)
         return self.camera
 
