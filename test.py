@@ -92,7 +92,7 @@ class Engine:
             inverse_camera_frame = camera_frame.inverted()
             if len(self.object_points):
                 untransformed_points = np.concatenate(self.object_points)
-                transformed_points = inverse_camera_frame.apply(untransformed_points)
+                transformed_points = inverse_camera_frame.apply(untransformed_points)[:,:3]
                 for idx, (object, range) in enumerate(zip(self.objects, self.object_point_ranges)):
                     object.draw(self, transformed_points[range[0]:range[1]])
         # getting a key also refreshes
