@@ -7,30 +7,42 @@ Z = np.array([0,0,1.0,0])
 W = np.array([0,0,0,1.0])
 
 class CoordFrame:
-    def __init__(self, mat = None):
+    def __init__(self, mat = None, position=[0,0,0], scale=1, axis=Z, angle=0):
         if mat is None:
-            mat = np.identity(4)
-        self.mat = mat
+            self.mat = np.identity(4)
+            self.set(position=position, scale=scale, axis=axis, angle=angle)
+        else:
+            self.mat = mat
     def apply(self, vec, out=None):
+        if type(vec) is CoordFrame:
+            vec = vec.mat
+        if type(out) is CoordFrame:
+            out = out.mat
         return np.matmul(vec, self.mat, out=out)
     def inverted(self):
         return CoordFrame(np.linalg.inv(self.mat))
-    @classmethod
-    def fromaxisangle(cls, axis, angle, position=[0,0,0], scale=1):
+    def set(self, mat = None, position=[0,0,0], scale=1, axis=None, angle=0):
         # from https://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
-        cos_theta = np.cos(angle)
-        sin_theta = np.sin(angle)
-        axis = axis[:3]
-        axis = axis / np.linalg.norm(axis)
-        mat = np.identity(4)
-        I = mat[:3,:3]
-        mat[:3, :3] =  (
-            cos_theta * I +
-            sin_theta * np.cross(axis, -I) +
-            (1 - cos_theta) * np.outer(axis, axis)
-        ) * scale
-        mat[3,:3] = position[:3]
-        return cls(mat)
+        if mat is not None:
+            if type(mat) is CoordFrame:
+                mat = mat.mat
+            self.mat[:] = mat
+            return
+        else:
+            cos_theta = np.cos(angle)
+            sin_theta = np.sin(angle)
+            if axis is not None:
+                axis = axis[:3]
+                axis = axis / np.linalg.norm(axis)
+                I = self.mat[:3,:3]
+                I[:] = np.identity(3)
+                self.mat[:3, :3] =  (
+                    cos_theta * I +
+                    sin_theta * np.cross(axis, -I) +
+                    (1 - cos_theta) * np.outer(axis, axis)
+                ) * scale
+            self.mat[3,:3] = position[:3]
+        return self
 
 class Point:
     def __init__(self, str, pos):
@@ -132,7 +144,13 @@ class Engine:
 class Scene(Engine):
     def __init__(self):
         self.last_key = 'press key?'
-        self.camera = CoordFrame.fromaxisangle(X, -np.pi/4, [0,10,-10,1]) # 10 units above and away, aiming down 45 deg
+        self.pitch_angle = -0.75
+        self.yaw_angle = 0
+        self.distance = 20
+        self.camframe_pitch = CoordFrame(axis=X, angle=self.pitch_angle)
+        self.camframe_yaw = CoordFrame(axis=Y, angle=self.yaw_angle)
+        self.camframe_distance = CoordFrame(position=[0,0,-self.distance])
+        self.camframe_final = CoordFrame()
         #self.text_object = Point("press key?", [0,0,0,1])
         self.text_objects = [
             Point("press key?", [pos[0]*8, 0, pos[1]*8, 1])
@@ -144,14 +162,44 @@ class Scene(Engine):
             )
         ]
         super().__init__(*self.text_objects)
-    def update(self, time_change, key = ''):
-        if key:
-            if key == 'q':
-                return None
+    def handle_key(self, time_change, key):
+        if key == 'q':
+            return False
+        # keys were set to angles just during debugging
+        if key in ('a', 'A', 'h', 'H', 'KEY_LEFT'):
+            # left
+            self.yaw_angle -= 0.125#time_change * 32
+            key = str(self.yaw_angle)
+        elif key in ('d', 'D', 'l', 'L', 'KEY_RIGHT'):
+            # right
+            self.yaw_angle += 0.125#time_change * 32
+            key = str(self.yaw_angle)
+        elif key in ('w', 'W', 'k', 'K', 'KEY_UP'):
+            # up
+            self.pitch_angle -= 0.125#time_change * 32
+            key = str(self.pitch_angle)
+        elif key in ('s', 'S', 'j', 'J', 'KEY_DOWN'):
+            # down
+            self.pitch_angle += 0.125#time_change * 32
+            key = str(self.pitch_angle)
+        elif key:
             for text_object in self.text_objects:
                 text_object.str = key
-        #self.plot(self.width / 2, self.height / 2, self.last_key)
-        return self.camera
+        return True
+    def update(self, time_change, key = ''):
+        if self.handle_key(time_change, key) == False:
+            return None
+
+        self.camframe_pitch = CoordFrame(axis=X, angle=self.pitch_angle)
+        self.camframe_yaw = CoordFrame(axis=Y, angle=self.yaw_angle)
+        self.camframe_distance.set(position=[0,0,-self.distance])
+
+        self.camframe_pitch.apply(self.camframe_distance, out=self.camframe_final)
+        self.camframe_yaw.apply(self.camframe_final, out=self.camframe_final)
+
+        #self.camframe_final.set(axis=X, angle=-np.pi/4, position=[0,10,-10,1])
+
+        return self.camframe_final
 
 if __name__ == '__main__':
     Scene().run()
